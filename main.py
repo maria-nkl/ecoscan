@@ -241,19 +241,18 @@ async def send_image(message: types.Message, detect_fn=detect_fn):
         #     for code in cods:
         #         await message.reply(f"Найден код на фото: {code}")
         #await message.reply(f"Новым поиском найдены коды: {finded_number}")
-    await message.reply(f"Итоговый набор: {label_number}")
+    #await message.reply(f"Итоговый набор: {label_number}")
 
 
     data = receving_inf(label_number)
+    label_number = list(label_number)
     s = 0
     if len(data) == 0:
         await message.reply("Адреса не найдены")
     else:
         for center in data:
             if center is None:
-                #print(label_number[s])
-                await message.reply("Адрес не найден")
-                #await bot.send_message(message.from_user.id, f"Для кода преработки {label_number[s]} адреса не найдены")
+                await bot.send_message(message.from_user.id, f"Для кода преработки {label_number[s]} адреса не найдены")
                 s += 1
                 continue
             s+=1

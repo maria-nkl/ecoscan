@@ -5,7 +5,6 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import tensorflow as tf
 import time
 import pytesseract
-#import math
 
 import numpy as np
 from PIL import Image
@@ -15,7 +14,7 @@ from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as viz_utils
 import cv2
 
-from config import PATH_TO_SAVED_MODEL, PATH_TO_LABELS, PATH_TO_IMAGE, PATH_TO_DETECT_IMAGE, URI_INFO, URI, ALL_CODES
+from config import PATH_TO_SAVED_MODEL, PATH_TO_LABELS, URI_INFO, URI
 
 def load_model(path_to_saved_model, path_to_labels):
     print('Загружаем модель...')
@@ -63,7 +62,6 @@ def object_detection(detect_fn, image_np, obj_min_score_thresh, label_min_score_
     min_score_thresh = label_min_score_thresh
     coordinate_label = {}
     for i in range(min(max_boxes_to_draw, boxes.shape[0])):
-        #
         if scores is None or scores[i] > min_score_thresh:
             class_name = category_index[detections['detection_classes'][i]]['name']
             print('На фото найден объект', class_name)
@@ -77,34 +75,23 @@ def pre_image(image):
     h, w = image.shape[:2]
     size_up = 0.1
     crop_img = image[int(h/2-w/2*(1-size_up)):int(h/2 + w/2*(1-size_up)), int(w*size_up):int(w*(1-size_up))]
-    cv2.imwrite(PATH_TO_DETECT_IMAGE + 'crop.jpg', crop_img)
 
-    ## приводим к формату 416х416
-    # h, w = crop_img.shape[:2]
-    # new_size = (416, int(h / (w / 416)))  # new_size=(width, height)
-    # resize_img = cv2.resize(crop_img, new_size)
-    # cv2.imwrite(PATH_TO_DETECT_IMAGE + 'resize.jpg', resize_img)
-
-    new_image = crop_img
-    return new_image
+    return crop_img
 
 # подготовка картинки для поиска цифры. Увеличение на 31% (подобрано эмпирическим путем)
 def pre_image_number(image):
     h, w = image.shape[:2]
     size_up = 0.31
     crop_img = image[int(h/2-w/2*(1-size_up)):int(h/2 + w/2*(1-size_up)), int(w*size_up):int(w*(1-size_up))]
-    cv2.imwrite('crop.jpg', crop_img)
-    new_image = crop_img
-    return new_image
+    gray = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)  # перекрашиваем в оттенки серого
+    return gray
 
-# поиск цифры внутри рамки
+# поиск цифры внутри рамки # описана в документации
 def detect_number(image):
     image = pre_image_number(image)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    #config = 'outputbase digits'
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe' #вызов приложухи которая ищет цифры
     config = r'--oem 3 --psm 6'
-    text_in_image = pytesseract.image_to_string(gray, config=config).split('\n')
+    text_in_image = pytesseract.image_to_string(image, config=config).split('\n') #на выходе строка с распознаными кодами
     labels=set()
     for i in text_in_image:
         if i.isdigit():
@@ -112,56 +99,42 @@ def detect_number(image):
     return labels
 
 
-
 #Загрузка модели
 detect_fn, category_index = load_model(PATH_TO_SAVED_MODEL,PATH_TO_LABELS)
 
-def photo_processing(detect_fn, filename, img, image_np, min_score_thresh=.4, label_min_score_thresh=.4):
+def photo_processing(detect_fn, image_np, min_score_thresh=.4, label_min_score_thresh=.4):
     start_time = time.time()
     cods = list()
-    print('Обработка фото {}... '.format(filename))
 
-    image_np_with_detections, coord_label = object_detection(
+    image_np_with_detections, coord_label = object_detection( # большая фотка с обведенным треугольником, коорднаты прямоугольника
         detect_fn,
         image_np,
         min_score_thresh,
         label_min_score_thresh
     )
     img = image_np
-    #print(coord_label) #словарь с объектами и их координатами
     h, w = img.shape[:2]
     finded_number = set()
+    #находим абсолютные координаты на картинке
     for number, label in coord_label.items():
-        #print(number, label)
         class_name, ymin, ymax, xmin, xmax, scores = label
         scores = int(scores*100)
-        #print(class_name, ymin, ymax, xmin, xmax)
         ymin = int(ymin * h)
         ymax = int(ymax * h)
         xmin = int(xmin * w)
         xmax = int(xmax * w)
         print('у кода "'+class_name+'" вероятность', scores, '%')
 
-        img1 = img[ymin:ymax, xmin:xmax]
+        img1 = img[ymin:ymax, xmin:xmax] #обрезанное фото с треугольником
 
-        ##сохраняем найденную рамку
-        # filename_label = str(number) + '_' + class_name + '_' + str(scores)+'.jpg'
-        # cv2.imwrite(PATH_TO_DETECT_IMAGE + filename_label, img1)
-
-        cods.append(class_name)
         finded_number = finded_number.union(detect_number(img1))
     print('!!!!! Найдено', finded_number)
 
-    #Сохраняем картинку с рамками
-    image_with_detections = Image.fromarray(image_np_with_detections)
-    image_with_detections.save('detect_images/'+'1.jpg')
     end_time = time.time()
     elapsed_time = end_time - start_time
     print('фото отработано за {} секунды'.format(elapsed_time))
-    return cods,finded_number
+    return finded_number
 
-
-#print('Готово! обработанные фото в папке detect_image')
 
 
 
@@ -208,7 +181,7 @@ async def description_command(message: types.Message) -> None:
                               "2. Постарайтесь сделать фото так, чтобы оно было качественным и знак переработки находился в резкости\n"
                               "3. Используйте минимальное расстояние от упаковки до камеры Вашего смартфона так, чтобы соблюдались предыдущие пункты\n"
                               "Пример фото:")
-    await bot.send_photo(chat_id=message.chat.id, photo=InputFile("c9de3562-2f52-4d96-a8be-172a3485e1c9.jpg"))
+    await bot.send_photo(chat_id=message.chat.id, photo=InputFile("photo_5429623284405755478_y.jpg"))
     await message.delete()
 
 @dp.message_handler()
@@ -223,8 +196,7 @@ async def send_image(message: types.Message, detect_fn=detect_fn):
     img_path = resp.json()['result']['file_path']
     img = requests.get(URI+img_path)
     img = Image.open((io.BytesIO(img.content)))
-    #сохраняем фото в папку photos, просто чтобы посмотреть
-    await message.photo[-1].download('photos/1.jpg')
+
     await message.reply("Началась обработка! Это может занять некоторое время.")
 
     image_np = np.array(img)
@@ -232,17 +204,9 @@ async def send_image(message: types.Message, detect_fn=detect_fn):
     #Последовательно увеличиваем картинку на 10% пять раз. каждый раз делаем распознавание
     for increment in range(5):
         image_np = pre_image(image_np)
-        cods, finded_number = photo_processing(detect_fn, 'photos/1.jpg', img, image_np, .3, .3)
+        finded_number = photo_processing(detect_fn, image_np, .3, .3)
         if len(label_number) <= len(finded_number):
             label_number = finded_number
-        # if len(cods) == 0:
-        #     await message.reply(f"Код на фото не найден")
-        # else:
-        #     for code in cods:
-        #         await message.reply(f"Найден код на фото: {code}")
-        #await message.reply(f"Новым поиском найдены коды: {finded_number}")
-    #await message.reply(f"Итоговый набор: {label_number}")
-
 
     data = receving_inf(label_number)
     label_number = list(label_number)

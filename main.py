@@ -181,7 +181,7 @@ async def description_command(message: types.Message) -> None:
                               "2. Постарайтесь сделать фото так, чтобы оно было качественным и знак переработки находился в резкости\n"
                               "3. Используйте минимальное расстояние от упаковки до камеры Вашего смартфона так, чтобы соблюдались предыдущие пункты\n"
                               "Пример фото:")
-    await bot.send_photo(chat_id=message.chat.id, photo=InputFile("photo_5429623284405755478_y.jpg"))
+    await bot.send_photo(chat_id=message.chat.id, photo=InputFile("instruction.jpg"))
     await message.delete()
 
 @dp.message_handler()
